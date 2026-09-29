@@ -60,7 +60,14 @@ public static class ContinueExportDiscovery
                     continue;
                 }
 
-                resolved.Add(new ResolvedCatalogEntry(channelId, candidate.File, format));
+                resolved.Add(
+                    new ResolvedCatalogEntry(
+                        channelId,
+                        candidate.File,
+                        format,
+                        candidate.Settings
+                    )
+                );
                 firstFailureReason = null;
                 break;
             }
@@ -90,7 +97,8 @@ public static class ContinueExportDiscovery
 public sealed record ResolvedCatalogEntry(
     Snowflake ChannelId,
     string FilePath,
-    ExportFormat Format
+    ExportFormat Format,
+    Manifest.ManifestExportSettings? Settings = null
 );
 
 public sealed record UnresolvedCatalogChannel(Snowflake ChannelId, ContinueSkipReason Reason);
