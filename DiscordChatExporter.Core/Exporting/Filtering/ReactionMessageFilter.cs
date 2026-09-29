@@ -12,4 +12,6 @@ internal class ReactionMessageFilter(string value) : MessageFilter
             || string.Equals(value, r.Emoji.Name, StringComparison.OrdinalIgnoreCase)
             || string.Equals(value, r.Emoji.Code, StringComparison.OrdinalIgnoreCase)
         );
+
+    public override string ToExpression() => $"reaction:{QuoteExpressionValue(value)}";
 }
