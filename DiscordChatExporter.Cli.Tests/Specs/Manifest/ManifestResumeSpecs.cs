@@ -281,10 +281,7 @@ public class ManifestResumeSpecs
             };
             var manifest = Manifest(entry);
 
-            ManifestResume
-                .IsAlreadyExported(manifest, dir, originalRequest)
-                .Should()
-                .BeTrue();
+            ManifestResume.IsAlreadyExported(manifest, dir, originalRequest).Should().BeTrue();
 
             ManifestResume
                 .IsAlreadyExported(
