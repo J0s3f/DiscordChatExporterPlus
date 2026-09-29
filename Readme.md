@@ -20,7 +20,9 @@ The fork remains close to upstream while selectively incorporating useful change
 
 - Resume JSON, HTML, CSV, and SQLite exports.
 - Whole-server checkpointing through `manifest.json`.
+- Manifest v2 stores the original export settings required for safe continuation.
 - Skip channels that were already completed on a previous run.
+- Incrementally update completed exports with messages posted since the last export.
 - Isolate per-channel failures so one recoverable error does not stop the full server export.
 - Retry malformed or truncated Discord JSON at the request level instead of restarting an entire channel.
 - Bound transient retries to avoid uncontrolled retry loops.
@@ -83,7 +85,29 @@ Remove-Item Env:DISCORD_TOKEN -ErrorAction SilentlyContinue
 
 `--parallel 1` is the recommended setting for a conservative single-server archival run. User-token Discord requests are serialized internally, so higher channel-level parallelism does not create simultaneous user-token API requests.
 
+To update the completed archive later without re-exporting its full history, run the same command
+with `--incremental` instead of `--resume`:
+
+```powershell
+& '.\DiscordChatExporter.Cli.exe' `
+    exportguild `
+    -g 123456789012345678 `
+    -f Csv `
+    -o 'C:\Discord Export\' `
+    --incremental `
+    --parallel 1
+```
+
+Incremental mode restores the original continuation-sensitive settings from `manifest.json` and
+appends only newer messages. See [Using the CLI](.docs/Using-the-CLI.md) for details.
+
 For very long exports, `scripts/Export-Guild-Resilient.ps1` wraps the same `exportguild --resume` workflow with bounded process-level retries.
+
+## Reporting bugs
+
+Use [GitHub Issues](https://github.com/wefalltomorrow/DiscordChatExporter/issues) for bug reports and
+feature requests. Include the application version, CLI/GUI mode, operating system, export format,
+relevant command/options, and any error output that does not contain credentials.
 
 ## Formats
 
