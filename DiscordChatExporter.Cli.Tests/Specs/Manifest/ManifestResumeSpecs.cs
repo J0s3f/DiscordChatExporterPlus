@@ -287,12 +287,7 @@ public class ManifestResumeSpecs
                 .IsAlreadyExported(
                     manifest,
                     dir,
-                    Request(
-                        filePath,
-                        guildId: 1,
-                        channelId: 2,
-                        shouldFormatMarkdown: false
-                    )
+                    Request(filePath, guildId: 1, channelId: 2, shouldFormatMarkdown: false)
                 )
                 .Should()
                 .BeFalse();
