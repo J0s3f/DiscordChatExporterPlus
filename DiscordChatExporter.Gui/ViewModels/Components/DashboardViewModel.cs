@@ -1572,8 +1572,7 @@ public partial class DashboardViewModel : ViewModelBase
 
         // Continue keeps each existing file/format; the dialog is only used to recover the
         // settings that older manifests could not store.
-        dialog.OutputPath =
-            missing[0].Dir + Path.DirectorySeparatorChar;
+        dialog.OutputPath = missing[0].Dir + Path.DirectorySeparatorChar;
         dialog.SelectedFormat = missing[0].Format;
 
         if (await _dialogManager.ShowDialogAsync(dialog) != true)
