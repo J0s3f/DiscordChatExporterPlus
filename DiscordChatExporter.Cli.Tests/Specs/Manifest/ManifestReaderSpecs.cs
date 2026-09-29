@@ -79,6 +79,7 @@ public class ManifestReaderSpecs
             entry.LastMessageId.Should().Be("900");
             entry.Sha256.Should().Be("abc123");
             entry.Partitioned.Should().BeFalse();
+            entry.Settings.Should().BeNull();
         }
         finally
         {
