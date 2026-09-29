@@ -1686,7 +1686,7 @@ public partial class DashboardViewModel : ViewModelBase
             outputPath,
             target.Format,
             target.Cutoff.Cutoff,
-            target.Cutoff.Before
+            before: null
         );
 
     internal async Task<ContinueExportRunSummary> RunContinueLoopAsync(
