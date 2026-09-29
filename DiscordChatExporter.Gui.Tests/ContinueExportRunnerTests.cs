@@ -11,6 +11,7 @@ using DiscordChatExporter.Core.Exceptions;
 using DiscordChatExporter.Core.Exporting;
 using DiscordChatExporter.Core.Exporting.Continuation;
 using DiscordChatExporter.Core.Exporting.Library;
+using DiscordChatExporter.Core.Exporting.Manifest;
 using DiscordChatExporter.Gui.Framework;
 using DiscordChatExporter.Gui.Localization;
 using DiscordChatExporter.Gui.Services;
@@ -266,10 +267,24 @@ public sealed class ContinueExportRunnerTests
                 """{"guild":{"id":"1"},"channel":{"id":"300"},"messages":[]}"""
             );
 
+            var settings = new ManifestExportSettings(
+                null,
+                UsesDefaultAssetsDir: true,
+                After: null,
+                Before: null,
+                PartitionLimit: null,
+                MessageFilter: null,
+                IsReverseMessageOrder: false,
+                ShouldFormatMarkdown: true,
+                ShouldDownloadAssets: true,
+                ShouldReuseAssets: true,
+                Locale: "en-AU",
+                IsUtcNormalizationEnabled: true
+            );
             var entries = new[]
             {
-                new ResolvedCatalogEntry(good.Id, goodPath, ExportFormat.Json),
-                new ResolvedCatalogEntry(empty.Id, emptyPath, ExportFormat.Json),
+                new ResolvedCatalogEntry(good.Id, goodPath, ExportFormat.Json, settings),
+                new ResolvedCatalogEntry(empty.Id, emptyPath, ExportFormat.Json, settings),
             };
             var byId = new Dictionary<Snowflake, Channel> { [good.Id] = good, [empty.Id] = empty };
             var unresolved = new List<UnresolvedCatalogChannel>();
@@ -283,6 +298,7 @@ public sealed class ContinueExportRunnerTests
             );
 
             targets.Should().ContainSingle().Which.Channel.Id.Should().Be(good.Id);
+            targets.Single().Settings.Should().Be(settings);
             unresolved.Should().ContainSingle();
             unresolved[0].ChannelId.Should().Be(empty.Id);
             unresolved[0].Reason.Should().Be(ContinueSkipReason.CutoffUnreadable);
