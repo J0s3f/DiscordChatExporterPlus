@@ -87,6 +87,41 @@ public sealed class ContinueExportRunnerTests
         );
     }
 
+    [Fact]
+    public void Continue_request_restores_the_original_export_settings()
+    {
+        var target = Target(10) with
+        {
+            Settings = new ManifestExportSettings(
+                Path.Combine(Path.GetTempPath(), "original-assets"),
+                UsesDefaultAssetsDir: false,
+                After: "1",
+                Before: "9999",
+                PartitionLimit: null,
+                MessageFilter: "from:\"alice\" & has:file",
+                IsReverseMessageOrder: false,
+                ShouldFormatMarkdown: false,
+                ShouldDownloadAssets: true,
+                ShouldReuseAssets: true,
+                Locale: "en-AU",
+                IsUtcNormalizationEnabled: true
+            ),
+        };
+        var tempPath = Path.Combine(Path.GetTempPath(), "continue.json");
+
+        var request = DashboardViewModel.BuildContinueExportRequest(target, tempPath);
+
+        request.After.Should().Be(target.Cutoff.Cutoff);
+        request.Before.Should().BeNull();
+        request.ShouldFormatMarkdown.Should().BeFalse();
+        request.ShouldDownloadAssets.Should().BeTrue();
+        request.ShouldReuseAssets.Should().BeTrue();
+        request.AssetsDirPath.Should().Be(target.Settings.AssetsDirPath);
+        request.MessageFilter.ToExpression().Should().Be("(from:\"alice\") & (has:file)");
+        request.Locale.Should().Be("en-AU");
+        request.IsUtcNormalizationEnabled.Should().BeTrue();
+    }
+
     [AvaloniaFact]
     public async Task Continuation_work_runs_off_the_ui_thread()
     {
