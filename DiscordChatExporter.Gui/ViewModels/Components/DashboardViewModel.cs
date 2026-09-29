@@ -1673,7 +1673,7 @@ public partial class DashboardViewModel : ViewModelBase
         }
     }
 
-    private static ExportRequest BuildContinueExportRequest(
+    internal static ExportRequest BuildContinueExportRequest(
         ResolvedContinueTarget target,
         string outputPath
     ) =>
