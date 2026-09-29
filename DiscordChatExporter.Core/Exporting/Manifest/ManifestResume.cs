@@ -92,7 +92,8 @@ public static class ManifestResume
     private static bool IsSameExportIdentity(ManifestEntry entry, ExportRequest request) =>
         entry.GuildId == request.Guild.Id.ToString()
         && entry.ChannelId == request.Channel.Id.ToString()
-        && entry.Format == request.Format.ToString();
+        && entry.Format == request.Format.ToString()
+        && (entry.Settings is null || entry.Settings.IsCompatibleWith(request));
 
     private static bool IsEntryIntact(
         ManifestEntry entry,
