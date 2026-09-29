@@ -8,7 +8,7 @@ public abstract partial class MessageFilter
 {
     public abstract bool IsMatch(Message message);
 
-    public abstract string? ToExpression();
+    public virtual string? ToExpression() => null;
 
     protected static string QuoteExpressionValue(string value) =>
         "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
