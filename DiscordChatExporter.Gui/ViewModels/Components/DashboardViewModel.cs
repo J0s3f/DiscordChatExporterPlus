@@ -762,16 +762,6 @@ public partial class DashboardViewModel : ViewModelBase
             if (await _dialogManager.ShowDialogAsync(dialog) != true)
                 return;
 
-            var resolvedTargets = await EnsureContinueSettingsAsync(
-                targets,
-                selectedGuild,
-                cancellationToken
-            );
-            if (resolvedTargets is null)
-                return;
-
-            targets = resolvedTargets;
-
             var exporter = new ChannelExporter(_discord);
             var cancellationToken = BeginCancelableOperation();
 
@@ -1332,6 +1322,16 @@ public partial class DashboardViewModel : ViewModelBase
 
                 return;
             }
+
+            var resolvedTargets = await EnsureContinueSettingsAsync(
+                targets,
+                selectedGuild,
+                cancellationToken
+            );
+            if (resolvedTargets is null)
+                return;
+
+            targets = resolvedTargets;
 
             var exporter = new ChannelExporter(_discord);
             var pairs = targets
