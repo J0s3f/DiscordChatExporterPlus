@@ -777,7 +777,8 @@ public abstract class ExportCommandBase : DiscordCommandBase
         CancellationToken cancellationToken
     )
     {
-        var state = job.Incremental
+        var state =
+            job.Incremental
             ?? throw new InvalidOperationException("Incremental export state is missing.");
 
         var cutoff = await ContinuationFormat.ReadCutoffAsync(
