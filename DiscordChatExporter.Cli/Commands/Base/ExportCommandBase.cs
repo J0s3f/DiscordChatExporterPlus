@@ -430,9 +430,9 @@ public abstract class ExportCommandBase : DiscordCommandBase
 
                 if (entry is null)
                 {
-                    var sameFormatEntries = channelEntries.Where(entry =>
-                        entry.Format == job.Request.Format.ToString()
-                    ).ToArray();
+                    var sameFormatEntries = channelEntries
+                        .Where(entry => entry.Format == job.Request.Format.ToString())
+                        .ToArray();
 
                     if (sameFormatEntries.Length == 1)
                         entry = sameFormatEntries[0];
