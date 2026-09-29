@@ -10,4 +10,6 @@ internal class FromMessageFilter(string value) : MessageFilter
         || string.Equals(value, message.Author.DisplayName, StringComparison.OrdinalIgnoreCase)
         || string.Equals(value, message.Author.FullName, StringComparison.OrdinalIgnoreCase)
         || string.Equals(value, message.Author.Id.ToString(), StringComparison.OrdinalIgnoreCase);
+
+    public override string ToExpression() => $"from:{QuoteExpressionValue(value)}";
 }
