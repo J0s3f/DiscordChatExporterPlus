@@ -67,6 +67,28 @@ public sealed record ManifestExportSettings(
             isUtcNormalizationEnabled
         );
 
+    public bool IsCompatibleWith(ExportRequest request)
+    {
+        var current = FromRequest(request);
+
+        return string.Equals(
+                current.AssetsDirPath,
+                AssetsDirPath,
+                System.StringComparison.OrdinalIgnoreCase
+            )
+            && current.UsesDefaultAssetsDir == UsesDefaultAssetsDir
+            && current.After == After
+            && current.Before == Before
+            && current.PartitionLimit == PartitionLimit
+            && current.MessageFilter == MessageFilter
+            && current.IsReverseMessageOrder == IsReverseMessageOrder
+            && current.ShouldFormatMarkdown == ShouldFormatMarkdown
+            && current.ShouldDownloadAssets == ShouldDownloadAssets
+            && current.ShouldReuseAssets == ShouldReuseAssets
+            && string.Equals(current.Locale, Locale, System.StringComparison.OrdinalIgnoreCase)
+            && current.IsUtcNormalizationEnabled == IsUtcNormalizationEnabled;
+    }
+
     public ExportRequest CreateContinuationRequest(
         Guild guild,
         Channel channel,
