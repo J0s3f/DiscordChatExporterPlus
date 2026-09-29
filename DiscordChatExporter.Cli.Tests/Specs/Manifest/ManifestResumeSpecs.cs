@@ -58,7 +58,12 @@ public class ManifestResumeSpecs
     private static ExportManifest Manifest(params ManifestEntry[] entries) =>
         new(ExportManifest.CurrentSchemaVersion, DateTimeOffset.UnixEpoch, entries);
 
-    private static ExportRequest Request(string filePath, ulong guildId, ulong channelId) =>
+    private static ExportRequest Request(
+        string filePath,
+        ulong guildId,
+        ulong channelId,
+        bool shouldFormatMarkdown = true
+    ) =>
         new(
             new Guild(new Snowflake(guildId), "g", ""),
             new Channel(
@@ -81,7 +86,7 @@ public class ManifestResumeSpecs
             PartitionLimit.Null,
             MessageFilter.Null,
             isReverseMessageOrder: false,
-            shouldFormatMarkdown: true,
+            shouldFormatMarkdown: shouldFormatMarkdown,
             shouldDownloadAssets: false,
             shouldReuseAssets: false,
             locale: "en-US",
@@ -248,6 +253,52 @@ public class ManifestResumeSpecs
 
             File.WriteAllText(part3Path, "CORRUPTED");
             ManifestResume.IsAlreadyExported(completeManifest, dir, request).Should().BeFalse();
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void V2_resume_rejects_changed_export_settings()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "DceManifest_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var filePath = Path.Combine(dir, "archive.json");
+        File.WriteAllText(filePath, "{}");
+
+        try
+        {
+            var originalRequest = Request(filePath, guildId: 1, channelId: 2);
+            var entry = Entry(
+                "archive.json",
+                new FileInfo(filePath).Length,
+                ComputeSha256(filePath)
+            ) with
+            {
+                Settings = ManifestExportSettings.FromRequest(originalRequest),
+            };
+            var manifest = Manifest(entry);
+
+            ManifestResume
+                .IsAlreadyExported(manifest, dir, originalRequest)
+                .Should()
+                .BeTrue();
+
+            ManifestResume
+                .IsAlreadyExported(
+                    manifest,
+                    dir,
+                    Request(
+                        filePath,
+                        guildId: 1,
+                        channelId: 2,
+                        shouldFormatMarkdown: false
+                    )
+                )
+                .Should()
+                .BeFalse();
         }
         finally
         {
