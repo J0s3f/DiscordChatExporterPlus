@@ -107,10 +107,7 @@ public class ManifestExportSettingsSpecs
     [InlineData("from:alice", "from:\"alice\"")]
     [InlineData("mentions:bob | has:image", "(mentions:\"bob\") | (has:image)")]
     [InlineData("~reaction:party", "~(reaction:\"party\")")]
-    public void Filter_expressions_can_be_serialized_and_parsed_again(
-        string input,
-        string expected
-    )
+    public void Filter_expressions_can_be_serialized_and_parsed_again(string input, string expected)
     {
         var filter = MessageFilter.Parse(input);
         var expression = filter.ToExpression();
