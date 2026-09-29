@@ -415,11 +415,7 @@ public abstract class ExportCommandBase : DiscordCommandBase
 
                 var expectedFileName = Path.GetFileName(job.Request.OutputFilePath);
                 var entry = matchingIdentityEntries.FirstOrDefault(entry =>
-                    string.Equals(
-                        entry.File,
-                        expectedFileName,
-                        StringComparison.OrdinalIgnoreCase
-                    )
+                    string.Equals(entry.File, expectedFileName, StringComparison.OrdinalIgnoreCase)
                 );
 
                 if (entry is null)
