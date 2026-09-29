@@ -61,12 +61,7 @@ public static class ContinueExportDiscovery
                 }
 
                 resolved.Add(
-                    new ResolvedCatalogEntry(
-                        channelId,
-                        candidate.File,
-                        format,
-                        candidate.Settings
-                    )
+                    new ResolvedCatalogEntry(channelId, candidate.File, format, candidate.Settings)
                 );
                 firstFailureReason = null;
                 break;
