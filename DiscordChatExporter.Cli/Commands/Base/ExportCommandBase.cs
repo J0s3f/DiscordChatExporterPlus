@@ -398,31 +398,54 @@ public abstract class ExportCommandBase : DiscordCommandBase
                     continue;
                 }
 
-                var matchingIdentityEntries = manifest
+                var channelEntries = manifest
                     .Entries.Where(entry =>
                         entry.GuildId == job.Request.Guild.Id.ToString()
                         && entry.ChannelId == job.Request.Channel.Id.ToString()
-                        && entry.Format == job.Request.Format.ToString()
                     )
                     .OrderByDescending(entry => entry.ExportedAt)
                     .ToArray();
 
-                if (matchingIdentityEntries.Length == 0)
+                if (channelEntries.Length == 0)
                 {
                     preparedJobs.Add(job);
                     continue;
                 }
 
+                // Prefer an exact current-command match when more than one archive exists for the
+                // channel. If there is only one archive, the manifest is the source of truth for
+                // its format/range/settings, so callers do not have to retype those options.
                 var expectedFileName = Path.GetFileName(job.Request.OutputFilePath);
-                var entry = matchingIdentityEntries.FirstOrDefault(entry =>
-                    string.Equals(entry.File, expectedFileName, StringComparison.OrdinalIgnoreCase)
+                var entry = channelEntries.FirstOrDefault(entry =>
+                    entry.Format == job.Request.Format.ToString()
+                    && string.Equals(entry.File, expectedFileName, StringComparison.OrdinalIgnoreCase)
                 );
+
+                if (entry is null && channelEntries.Length == 1)
+                    entry = channelEntries[0];
+
+                if (entry is null)
+                {
+                    var sameFormatEntries = channelEntries.Where(entry =>
+                        entry.Format == job.Request.Format.ToString()
+                    ).ToArray();
+
+                    if (sameFormatEntries.Length == 1)
+                        entry = sameFormatEntries[0];
+                }
 
                 if (entry is null)
                 {
                     errorsByChannel[job.Channel] =
-                        "An existing export was found for this channel, but it does not match the current output path/range. "
-                        + "Run --incremental with the same output path, format, and original date range used for the export.";
+                        "Multiple existing exports were found for this channel and the target is ambiguous. "
+                        + "Specify the original format/output path, or keep only the archive you want to update in this manifest.";
+                    continue;
+                }
+
+                if (!Enum.TryParse<ExportFormat>(entry.Format, out var incrementalFormat))
+                {
+                    errorsByChannel[job.Channel] =
+                        $"The existing manifest contains an unknown export format '{entry.Format}'.";
                     continue;
                 }
 
@@ -448,11 +471,14 @@ public abstract class ExportCommandBase : DiscordCommandBase
                         "This export was created with a v1 manifest that did not store export settings. "
                         + "The current CLI options will be used once and saved to manifest.json for future incremental runs.";
                 }
-                else if (!entry.Settings.IsCompatibleWith(job.Request))
+                else if (
+                    incrementalFormat != job.Request.Format
+                    || !entry.Settings.IsCompatibleWith(job.Request)
+                )
                 {
                     warningsByChannel[job.Channel] =
                         "Some CLI export options differ from the original export. "
-                        + "Incremental mode will use the settings stored in manifest.json.";
+                        + "Incremental mode will use the format and settings stored in manifest.json.";
                 }
 
                 preparedJobs.Add(
@@ -461,7 +487,8 @@ public abstract class ExportCommandBase : DiscordCommandBase
                         Incremental = new IncrementalExportState(
                             existingFilePath,
                             entry,
-                            settings
+                            settings,
+                            incrementalFormat
                         ),
                     }
                 );
@@ -774,7 +801,7 @@ public abstract class ExportCommandBase : DiscordCommandBase
                 job.Request.Channel,
                 state.ExistingFilePath,
                 tempPath,
-                job.Request.Format,
+                state.Format,
                 cutoff.Cutoff,
                 before: null
             );
@@ -789,7 +816,7 @@ public abstract class ExportCommandBase : DiscordCommandBase
             }
             catch (ChannelEmptyException)
             {
-                if (job.Request.Format is not ExportFormat.Db)
+                if (state.Format is not ExportFormat.Db)
                     return null;
             }
 
@@ -922,7 +949,8 @@ public abstract class ExportCommandBase : DiscordCommandBase
     private sealed record IncrementalExportState(
         string ExistingFilePath,
         ManifestEntry Entry,
-        ManifestExportSettings Settings
+        ManifestExportSettings Settings,
+        ExportFormat Format
     );
 
     private sealed record ExportJob(
