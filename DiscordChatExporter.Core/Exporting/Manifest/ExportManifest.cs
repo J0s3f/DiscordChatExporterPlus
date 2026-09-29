@@ -9,6 +9,6 @@ public sealed record ExportManifest(
     IReadOnlyList<ManifestEntry> Entries
 )
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
     public const string FileName = "manifest.json";
 }

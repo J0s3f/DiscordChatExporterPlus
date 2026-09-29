@@ -67,6 +67,32 @@ public class ManifestBuilderSpecs : IDisposable
     }
 
     [Fact]
+    public void Export_settings_are_attached_to_each_manifest_entry()
+    {
+        var path = WriteFile("general.json", "hello");
+        var result = new ExportResult([new ExportedFile(path, 1, null, null, null, null)], 1, 0);
+        var settings = new ManifestExportSettings(
+            null,
+            UsesDefaultAssetsDir: true,
+            After: null,
+            Before: null,
+            PartitionLimit: null,
+            MessageFilter: "from:\"alice\"",
+            IsReverseMessageOrder: false,
+            ShouldFormatMarkdown: true,
+            ShouldDownloadAssets: true,
+            ShouldReuseAssets: true,
+            Locale: "en-AU",
+            IsUtcNormalizationEnabled: true
+        );
+
+        var entries = ManifestBuilder.Build(Info(), result, DateTimeOffset.UnixEpoch, settings);
+
+        entries.Should().ContainSingle();
+        entries[0].Settings.Should().Be(settings);
+    }
+
+    [Fact]
     public void A_partitioned_export_produces_one_entry_per_file_all_flagged_partitioned()
     {
         var p1 = WriteFile("a.json", "x");

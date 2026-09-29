@@ -22,4 +22,7 @@ public sealed record ManifestEntry(
     string Sha256,
     bool Partitioned,
     DateTimeOffset ExportedAt
-);
+)
+{
+    public ManifestExportSettings? Settings { get; init; }
+}

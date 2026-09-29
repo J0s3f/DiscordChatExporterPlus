@@ -1,11 +1,5 @@
 blank_issues_enabled: true
 contact_links:
-  - name: 📖 Documentation
-    url: https://github.com/wefalltomorrow/DiscordChatExporter/tree/prime/.docs
-    about: Find usage guides and frequently asked questions.
-  - name: 🗨 Discussions
-    url: https://github.com/wefalltomorrow/DiscordChatExporter/discussions
-    about: Ask and answer questions.
-  - name: 📦 Upstream project (Tyrrrz/DiscordChatExporter)
+  - name: Upstream DiscordChatExporter
     url: https://github.com/Tyrrrz/DiscordChatExporter
-    about: This is a fork. Questions about upstream features can be raised there.
+    about: Report issues that also reproduce on the upstream project here.

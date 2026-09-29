@@ -843,6 +843,7 @@ public partial class DashboardViewModel : ViewModelBase
                 BuildManifestInfo(request),
                 result,
                 DateTimeOffset.Now,
+                ManifestExportSettings.FromRequest(request),
                 cancellationToken
             );
             await ManifestWriter.WriteAsync(
@@ -884,6 +885,7 @@ public partial class DashboardViewModel : ViewModelBase
         Channel channel,
         long messageCount,
         ExportResult? appendedResult,
+        ManifestExportSettings? settings,
         CancellationToken cancellationToken
     )
     {
@@ -925,6 +927,7 @@ public partial class DashboardViewModel : ViewModelBase
                         info,
                         result,
                         DateTimeOffset.Now,
+                        prior?.Settings ?? settings,
                         cancellationToken
                     );
                     if (entries.Count == 0)
@@ -952,6 +955,7 @@ public partial class DashboardViewModel : ViewModelBase
                                     ? appendedFile?.LastMessageTimestamp
                                     : prior.LastMessageTimestamp,
                                 AssetCount = prior.AssetCount,
+                                Settings = prior.Settings ?? settings,
                             },
                         ];
                     }
@@ -1319,6 +1323,16 @@ public partial class DashboardViewModel : ViewModelBase
                 return;
             }
 
+            var resolvedTargets = await EnsureContinueSettingsAsync(
+                targets,
+                selectedGuild,
+                cancellationToken
+            );
+            if (resolvedTargets is null)
+                return;
+
+            targets = resolvedTargets;
+
             var exporter = new ChannelExporter(_discord);
             var pairs = targets
                 .Select(
@@ -1443,7 +1457,8 @@ public partial class DashboardViewModel : ViewModelBase
                     entry.FilePath,
                     Path.GetDirectoryName(entry.FilePath) ?? string.Empty,
                     entry.Format,
-                    cutoff
+                    cutoff,
+                    entry.Settings
                 )
             );
         }
@@ -1527,6 +1542,65 @@ public partial class DashboardViewModel : ViewModelBase
         );
     }
 
+    private async Task<IReadOnlyList<ResolvedContinueTarget>?> EnsureContinueSettingsAsync(
+        IReadOnlyList<ResolvedContinueTarget> targets,
+        Guild selectedGuild,
+        CancellationToken cancellationToken
+    )
+    {
+        var missing = targets.Where(target => target.Settings is null).ToArray();
+        if (missing.Length == 0)
+            return targets;
+
+        var warning = _viewModelManager.GetMessageBoxViewModel(
+            "Export settings required",
+            "One or more selected exports were created before continuation settings were stored in manifest.json. "
+                + "Confirm the original export options before continuing. These settings will be saved to the manifest for future runs.",
+            "Continue",
+            LocalizationManager.CancelButton
+        );
+
+        if (await _dialogManager.ShowDialogAsync(warning) != true)
+            return null;
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var dialog = _viewModelManager.GetExportSetupViewModel(
+            selectedGuild,
+            missing.Select(target => target.Channel).ToArray()
+        );
+
+        // Continue keeps each existing file/format; the dialog is only used to recover the
+        // settings that older manifests could not store.
+        dialog.OutputPath = missing[0].Dir + Path.DirectorySeparatorChar;
+        dialog.SelectedFormat = missing[0].Format;
+
+        if (await _dialogManager.ShowDialogAsync(dialog) != true)
+            return null;
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var settings = ManifestExportSettings.FromValues(
+            dialog.AssetsDirPath,
+            dialog.After?.Pipe(Snowflake.FromDate),
+            dialog.Before?.Pipe(Snowflake.FromDate),
+            dialog.PartitionLimit.ToExpression(),
+            dialog.MessageFilter.ToExpression(),
+            dialog.IsReverseMessageOrder,
+            dialog.ShouldFormatMarkdown,
+            dialog.ShouldDownloadAssets,
+            dialog.ShouldReuseAssets,
+            _settingsService.Locale,
+            _settingsService.IsUtcNormalizationEnabled
+        );
+
+        return targets
+            .Select(target =>
+                target.Settings is null ? target with { Settings = settings } : target
+            )
+            .ToArray();
+    }
+
     private async Task<ContinueExportFileResult> ContinueExportFileAsync(
         ChannelExporter exporter,
         ResolvedContinueTarget target,
@@ -1578,6 +1652,7 @@ public partial class DashboardViewModel : ViewModelBase
                 target.Channel,
                 total,
                 appendedResult,
+                target.Settings,
                 cancellationToken
             );
 
@@ -1598,26 +1673,23 @@ public partial class DashboardViewModel : ViewModelBase
         }
     }
 
-    private ExportRequest BuildContinueExportRequest(
+    internal static ExportRequest BuildContinueExportRequest(
         ResolvedContinueTarget target,
         string outputPath
     ) =>
-        new(
+        (
+            target.Settings
+            ?? throw new InvalidExportException(
+                "The export settings required for continuation are unavailable."
+            )
+        ).CreateContinuationRequest(
             target.Guild,
             target.Channel,
+            target.FilePath,
             outputPath,
-            null,
             target.Format,
             target.Cutoff.Cutoff,
-            target.Cutoff.Before,
-            PartitionLimit.Null,
-            MessageFilter.Null,
-            false,
-            _settingsService.LastShouldFormatMarkdown,
-            false,
-            false,
-            _settingsService.Locale,
-            _settingsService.IsUtcNormalizationEnabled
+            before: null
         );
 
     internal async Task<ContinueExportRunSummary> RunContinueLoopAsync(

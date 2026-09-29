@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Headless.XUnit;
@@ -11,6 +12,7 @@ using DiscordChatExporter.Core.Exceptions;
 using DiscordChatExporter.Core.Exporting;
 using DiscordChatExporter.Core.Exporting.Continuation;
 using DiscordChatExporter.Core.Exporting.Library;
+using DiscordChatExporter.Core.Exporting.Manifest;
 using DiscordChatExporter.Gui.Framework;
 using DiscordChatExporter.Gui.Localization;
 using DiscordChatExporter.Gui.Services;
@@ -83,6 +85,41 @@ public sealed class ContinueExportRunnerTests
             ExportFormat.Json,
             new ContinuationCutoff(channel.Id, new Snowflake(channelId + 10), null, true, 1, true)
         );
+    }
+
+    [Fact]
+    public void Continue_request_restores_the_original_export_settings()
+    {
+        var target = Target(10) with
+        {
+            Settings = new ManifestExportSettings(
+                Path.Combine(Path.GetTempPath(), "original-assets"),
+                UsesDefaultAssetsDir: false,
+                After: "1",
+                Before: "9999",
+                PartitionLimit: null,
+                MessageFilter: "from:\"alice\" & has:file",
+                IsReverseMessageOrder: false,
+                ShouldFormatMarkdown: false,
+                ShouldDownloadAssets: true,
+                ShouldReuseAssets: true,
+                Locale: "en-AU",
+                IsUtcNormalizationEnabled: true
+            ),
+        };
+        var tempPath = Path.Combine(Path.GetTempPath(), "continue.json");
+
+        var request = DashboardViewModel.BuildContinueExportRequest(target, tempPath);
+
+        request.After.Should().Be(target.Cutoff.Cutoff);
+        request.Before.Should().BeNull();
+        request.ShouldFormatMarkdown.Should().BeFalse();
+        request.ShouldDownloadAssets.Should().BeTrue();
+        request.ShouldReuseAssets.Should().BeTrue();
+        request.AssetsDirPath.Should().Be(target.Settings.AssetsDirPath);
+        request.MessageFilter.ToExpression().Should().Be("(from:\"alice\") & (has:file)");
+        request.Locale.Should().Be("en-AU");
+        request.IsUtcNormalizationEnabled.Should().BeTrue();
     }
 
     [AvaloniaFact]
@@ -266,10 +303,24 @@ public sealed class ContinueExportRunnerTests
                 """{"guild":{"id":"1"},"channel":{"id":"300"},"messages":[]}"""
             );
 
+            var settings = new ManifestExportSettings(
+                null,
+                UsesDefaultAssetsDir: true,
+                After: null,
+                Before: null,
+                PartitionLimit: null,
+                MessageFilter: null,
+                IsReverseMessageOrder: false,
+                ShouldFormatMarkdown: true,
+                ShouldDownloadAssets: true,
+                ShouldReuseAssets: true,
+                Locale: "en-AU",
+                IsUtcNormalizationEnabled: true
+            );
             var entries = new[]
             {
-                new ResolvedCatalogEntry(good.Id, goodPath, ExportFormat.Json),
-                new ResolvedCatalogEntry(empty.Id, emptyPath, ExportFormat.Json),
+                new ResolvedCatalogEntry(good.Id, goodPath, ExportFormat.Json, settings),
+                new ResolvedCatalogEntry(empty.Id, emptyPath, ExportFormat.Json, settings),
             };
             var byId = new Dictionary<Snowflake, Channel> { [good.Id] = good, [empty.Id] = empty };
             var unresolved = new List<UnresolvedCatalogChannel>();
@@ -283,6 +334,7 @@ public sealed class ContinueExportRunnerTests
             );
 
             targets.Should().ContainSingle().Which.Channel.Id.Should().Be(good.Id);
+            targets.Single().Settings.Should().Be(settings);
             unresolved.Should().ContainSingle();
             unresolved[0].ChannelId.Should().Be(empty.Id);
             unresolved[0].Reason.Should().Be(ContinueSkipReason.CutoffUnreadable);

@@ -7,6 +7,11 @@ namespace DiscordChatExporter.Core.Exporting.Filtering;
 public abstract partial class MessageFilter
 {
     public abstract bool IsMatch(Message message);
+
+    public virtual string? ToExpression() => null;
+
+    protected static string QuoteExpressionValue(string value) =>
+        "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
 }
 
 public partial class MessageFilter

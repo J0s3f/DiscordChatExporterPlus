@@ -280,6 +280,33 @@ If you want to create checkpoints without skipping any existing exports on the c
 A manifest/catalog write failure is reported as a warning and does not invalidate an otherwise
 successful channel export.
 
+#### Updating an existing export with new messages
+
+Use `--incremental` to update an existing completed export with messages posted after the last
+message already stored in that export.
+
+```console
+./DiscordChatExporter.Cli exportguild -t "mfa.Ifrn" -g 21814 -f Json -o "C:\Discord Exports" --incremental
+```
+
+Incremental mode is different from `--resume`:
+
+- `--resume` finishes an interrupted multi-channel run and skips channels already recorded as complete.
+- `--incremental` opens an existing completed export, fetches messages after its last exported message,
+  merges the new messages into the existing file, and refreshes `manifest.json`.
+- Channels that do not have a previous export in the manifest are exported normally.
+
+Manifest schema v2 stores the original export settings required for continuation, including media
+download/reuse, media directory, message filter, markdown handling, locale, UTC normalization, date
+range, reverse-order state, and partition settings. Incremental runs restore those settings from the
+manifest instead of silently using current defaults.
+
+If an older v1 manifest is encountered, the CLI uses the options supplied for that run and stores them
+in the upgraded manifest after a successful incremental update.
+
+`--incremental` cannot be combined with `--resume` or `--checkpoint`. Partitioned and
+reverse-chronological exports are not currently supported for incremental continuation.
+
 #### Including threads
 
 By default, threads are not included in the export. You can change this behavior by using `--include-threads` and

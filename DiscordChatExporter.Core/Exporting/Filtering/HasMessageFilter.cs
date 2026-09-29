@@ -24,4 +24,20 @@ internal class HasMessageFilter(MessageContentMatchKind kind) : MessageFilter
                 $"Unknown message content match kind '{kind}'."
             ),
         };
+
+    public override string ToExpression() =>
+        kind switch
+        {
+            MessageContentMatchKind.Link => "has:link",
+            MessageContentMatchKind.Embed => "has:embed",
+            MessageContentMatchKind.File => "has:file",
+            MessageContentMatchKind.Video => "has:video",
+            MessageContentMatchKind.Image => "has:image",
+            MessageContentMatchKind.Sound => "has:sound",
+            MessageContentMatchKind.Pin => "has:pin",
+            MessageContentMatchKind.Invite => "has:invite",
+            _ => throw new InvalidOperationException(
+                $"Unknown message content match kind '{kind}'."
+            ),
+        };
 }

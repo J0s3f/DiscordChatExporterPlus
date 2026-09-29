@@ -15,6 +15,14 @@ public static class ManifestBuilder
         ExportResult result,
         DateTimeOffset now,
         CancellationToken cancellationToken = default
+    ) => Build(info, result, now, null, cancellationToken);
+
+    public static IReadOnlyList<ManifestEntry> Build(
+        ManifestChannelInfo info,
+        ExportResult result,
+        DateTimeOffset now,
+        ManifestExportSettings? settings,
+        CancellationToken cancellationToken = default
     )
     {
         var partitioned = result.Files.Count > 1;
@@ -61,6 +69,9 @@ public static class ManifestBuilder
                     Partitioned: partitioned,
                     ExportedAt: now
                 )
+                {
+                    Settings = settings,
+                }
             );
         }
 

@@ -17,6 +17,7 @@ using DiscordChatExporter.Core.Discord;
 using DiscordChatExporter.Core.Discord.Data;
 using DiscordChatExporter.Core.Exceptions;
 using DiscordChatExporter.Core.Exporting;
+using DiscordChatExporter.Core.Exporting.Continuation;
 using DiscordChatExporter.Core.Exporting.Filtering;
 using DiscordChatExporter.Core.Exporting.Manifest;
 using DiscordChatExporter.Core.Exporting.Partitioning;
@@ -137,6 +138,13 @@ public abstract class ExportCommandBase : DiscordCommandBase
     public bool ShouldResume { get; set; }
 
     [CommandOption(
+        "incremental",
+        Description = "Update existing completed exports with messages posted since their last exported message. "
+            + "Existing export settings are restored from manifest.json. Channels with no previous export are exported normally."
+    )]
+    public bool ShouldIncremental { get; set; }
+
+    [CommandOption(
         "checkpoint",
         Description = "Write or update manifest.json after each completed channel without skipping existing exports. "
             + "Use --resume on a later run to continue from those checkpoints."
@@ -171,7 +179,8 @@ public abstract class ExportCommandBase : DiscordCommandBase
     [field: AllowNull, MaybeNull]
     protected ChannelExporter Exporter => field ??= new ChannelExporter(Discord);
 
-    private bool IsManifestCheckpointingEnabled => ShouldResume || ShouldCheckpoint;
+    private bool IsManifestCheckpointingEnabled =>
+        ShouldResume || ShouldCheckpoint || ShouldIncremental;
 
     private static ManifestChannelInfo BuildManifestInfo(ExportRequest request) =>
         new(
@@ -195,6 +204,7 @@ public abstract class ExportCommandBase : DiscordCommandBase
                 BuildManifestInfo(request),
                 result,
                 DateTimeOffset.Now,
+                ManifestExportSettings.FromRequest(request),
                 cancellationToken
             );
 
@@ -217,6 +227,14 @@ public abstract class ExportCommandBase : DiscordCommandBase
     protected async ValueTask ExportAsync(IConsole console, IReadOnlyList<Channel> channels)
     {
         var cancellationToken = console.RegisterCancellationHandler();
+
+        if (ShouldIncremental && (ShouldResume || ShouldCheckpoint))
+        {
+            throw new CommandException(
+                "Option --incremental cannot be combined with --resume or --checkpoint. "
+                    + "Incremental mode already resumes incomplete channels and checkpoints completed work."
+            );
+        }
 
         // Asset reuse can only be enabled if the download assets option is set
         // https://github.com/Tyrrrz/DiscordChatExporter/issues/425
@@ -353,6 +371,136 @@ public abstract class ExportCommandBase : DiscordCommandBase
             );
         }
 
+        if (ShouldIncremental && exportJobs.Count > 0)
+        {
+            var manifestsByDir = new Dictionary<string, ExportManifest?>(
+                StringComparer.OrdinalIgnoreCase
+            );
+            var preparedJobs = new List<ExportJob>(exportJobs.Count);
+
+            foreach (var job in exportJobs)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var dirPath = job.Request.OutputDirPath;
+                if (!manifestsByDir.TryGetValue(dirPath, out var manifest))
+                {
+                    manifest = await ManifestReader.TryReadAsync(
+                        Path.Combine(dirPath, ExportManifest.FileName),
+                        cancellationToken
+                    );
+                    manifestsByDir[dirPath] = manifest;
+                }
+
+                if (manifest is null)
+                {
+                    preparedJobs.Add(job);
+                    continue;
+                }
+
+                var channelEntries = manifest
+                    .Entries.Where(entry =>
+                        entry.GuildId == job.Request.Guild.Id.ToString()
+                        && entry.ChannelId == job.Request.Channel.Id.ToString()
+                    )
+                    .OrderByDescending(entry => entry.ExportedAt)
+                    .ToArray();
+
+                if (channelEntries.Length == 0)
+                {
+                    preparedJobs.Add(job);
+                    continue;
+                }
+
+                // Prefer an exact current-command match when more than one archive exists for the
+                // channel. If there is only one archive, the manifest is the source of truth for
+                // its format/range/settings, so callers do not have to retype those options.
+                var expectedFileName = Path.GetFileName(job.Request.OutputFilePath);
+                var entry = channelEntries.FirstOrDefault(entry =>
+                    entry.Format == job.Request.Format.ToString()
+                    && string.Equals(
+                        entry.File,
+                        expectedFileName,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                );
+
+                if (entry is null && channelEntries.Length == 1)
+                    entry = channelEntries[0];
+
+                if (entry is null)
+                {
+                    var sameFormatEntries = channelEntries
+                        .Where(entry => entry.Format == job.Request.Format.ToString())
+                        .ToArray();
+
+                    if (sameFormatEntries.Length == 1)
+                        entry = sameFormatEntries[0];
+                }
+
+                if (entry is null)
+                {
+                    errorsByChannel[job.Channel] =
+                        "Multiple existing exports were found for this channel and the target is ambiguous. "
+                        + "Specify the original format/output path, or keep only the archive you want to update in this manifest.";
+                    continue;
+                }
+
+                if (!Enum.TryParse<ExportFormat>(entry.Format, out var incrementalFormat))
+                {
+                    errorsByChannel[job.Channel] =
+                        $"The existing manifest contains an unknown export format '{entry.Format}'.";
+                    continue;
+                }
+
+                if (entry.Partitioned)
+                {
+                    errorsByChannel[job.Channel] =
+                        "Incremental continuation of partitioned exports is not supported.";
+                    continue;
+                }
+
+                var existingFilePath = Path.Combine(dirPath, entry.File);
+                if (!File.Exists(existingFilePath))
+                {
+                    // Stale manifest entry: rebuild this channel normally.
+                    preparedJobs.Add(job);
+                    continue;
+                }
+
+                var settings = entry.Settings ?? ManifestExportSettings.FromRequest(job.Request);
+                if (entry.Settings is null)
+                {
+                    warningsByChannel[job.Channel] =
+                        "This export was created with a v1 manifest that did not store export settings. "
+                        + "The current CLI options will be used once and saved to manifest.json for future incremental runs.";
+                }
+                else if (
+                    incrementalFormat != job.Request.Format
+                    || !entry.Settings.IsCompatibleWith(job.Request)
+                )
+                {
+                    warningsByChannel[job.Channel] =
+                        "Some CLI export options differ from the original export. "
+                        + "Incremental mode will use the format and settings stored in manifest.json.";
+                }
+
+                preparedJobs.Add(
+                    job with
+                    {
+                        Incremental = new IncrementalExportState(
+                            existingFilePath,
+                            entry,
+                            settings,
+                            incrementalFormat
+                        ),
+                    }
+                );
+            }
+
+            exportJobs = preparedJobs;
+        }
+
         var skippedCompletedCount = 0;
 
         if (ShouldResume && exportJobs.Count > 0)
@@ -446,22 +594,38 @@ public abstract class ExportCommandBase : DiscordCommandBase
                                 async progress =>
                                 {
                                     var percentageProgress = progress.ToPercentageBased();
-                                    var result = await Exporter.ExportChannelAsync(
-                                        job.Request,
-                                        new CliExportProgress(percentageProgress),
-                                        innerCancellationToken
-                                    );
 
-                                    if (IsManifestCheckpointingEnabled)
+                                    if (job.Incremental is not null)
                                     {
-                                        var manifestWarning = await TryCheckpointManifestAsync(
-                                            job.Request,
-                                            result,
+                                        var manifestWarning = await RunIncrementalExportAsync(
+                                            job,
+                                            percentageProgress,
                                             innerCancellationToken
                                         );
 
                                         if (!string.IsNullOrWhiteSpace(manifestWarning))
                                             manifestWarningsByChannel[channel] = manifestWarning;
+                                    }
+                                    else
+                                    {
+                                        var result = await Exporter.ExportChannelAsync(
+                                            job.Request,
+                                            new CliExportProgress(percentageProgress),
+                                            innerCancellationToken
+                                        );
+
+                                        if (IsManifestCheckpointingEnabled)
+                                        {
+                                            var manifestWarning = await TryCheckpointManifestAsync(
+                                                job.Request,
+                                                result,
+                                                innerCancellationToken
+                                            );
+
+                                            if (!string.IsNullOrWhiteSpace(manifestWarning))
+                                                manifestWarningsByChannel[channel] =
+                                                    manifestWarning;
+                                        }
                                     }
                                 }
                             );
@@ -470,7 +634,7 @@ public abstract class ExportCommandBase : DiscordCommandBase
                         {
                             warningsByChannel[channel] = ex.Message;
 
-                            if (IsManifestCheckpointingEnabled)
+                            if (job.Incremental is null && IsManifestCheckpointingEnabled)
                             {
                                 var manifestWarning = await TryCheckpointManifestAsync(
                                     job.Request,
@@ -607,7 +771,197 @@ public abstract class ExportCommandBase : DiscordCommandBase
             throw new CommandException("Export failed.");
     }
 
-    private sealed record ExportJob(Channel Channel, ExportRequest Request);
+    private async ValueTask<string?> RunIncrementalExportAsync(
+        ExportJob job,
+        IProgress<Percentage> progress,
+        CancellationToken cancellationToken
+    )
+    {
+        var state =
+            job.Incremental
+            ?? throw new InvalidOperationException("Incremental export state is missing.");
+
+        var cutoff = await ContinuationFormat.ReadCutoffAsync(
+            state.ExistingFilePath,
+            cancellationToken
+        );
+
+        if (!cutoff.IsChronological)
+        {
+            throw new InvalidExportException(
+                "Incremental continuation of reverse-chronological exports is not supported."
+            );
+        }
+
+        var tempPath = Path.Combine(
+            Path.GetTempPath(),
+            $"DiscordChatExporter-incremental-{Guid.NewGuid():N}{Path.GetExtension(state.ExistingFilePath)}"
+        );
+
+        ExportResult? appendedResult = null;
+
+        try
+        {
+            var request = state.Settings.CreateContinuationRequest(
+                job.Request.Guild,
+                job.Request.Channel,
+                state.ExistingFilePath,
+                tempPath,
+                state.Format,
+                cutoff.Cutoff,
+                before: null
+            );
+
+            try
+            {
+                appendedResult = await Exporter.ExportChannelAsync(
+                    request,
+                    new CliExportProgress(progress),
+                    cancellationToken
+                );
+            }
+            catch (ChannelEmptyException)
+            {
+                if (state.Format is not ExportFormat.Db)
+                    return null;
+            }
+
+            var total = await ContinuationFormat.MergeAsync(
+                state.ExistingFilePath,
+                tempPath,
+                cutoff,
+                DateTimeOffset.Now,
+                cancellationToken
+            );
+
+            return await TryRefreshIncrementalManifestAsync(
+                state,
+                job.Request,
+                total,
+                appendedResult,
+                cancellationToken
+            );
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(tempPath);
+            }
+            catch
+            {
+                // Best-effort cleanup.
+            }
+        }
+    }
+
+    private static async ValueTask<string?> TryRefreshIncrementalManifestAsync(
+        IncrementalExportState state,
+        ExportRequest originalRequest,
+        long messageCount,
+        ExportResult? appendedResult,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            var dir = Path.GetDirectoryName(state.ExistingFilePath);
+            if (string.IsNullOrWhiteSpace(dir))
+                return "Could not resolve the export directory while updating manifest.json.";
+
+            var fileName = Path.GetFileName(state.ExistingFilePath);
+
+            await ManifestWriter.UpdateAsync(
+                dir,
+                existing =>
+                {
+                    var prior =
+                        existing?.Entries.FirstOrDefault(entry =>
+                            string.Equals(entry.File, fileName, StringComparison.OrdinalIgnoreCase)
+                        )
+                        ?? state.Entry;
+
+                    var info = new ManifestChannelInfo(
+                        originalRequest.Guild.Id.ToString(),
+                        originalRequest.Guild.Name,
+                        originalRequest.Channel.Id.ToString(),
+                        originalRequest.Channel.Name,
+                        originalRequest.Channel.Parent?.Name,
+                        prior.Format
+                    );
+
+                    var result = new ExportResult(
+                        [
+                            new ExportedFile(
+                                state.ExistingFilePath,
+                                messageCount,
+                                null,
+                                null,
+                                null,
+                                null
+                            ),
+                        ],
+                        messageCount,
+                        prior.AssetCount ?? 0
+                    );
+
+                    var entries = ManifestBuilder.Build(
+                        info,
+                        result,
+                        DateTimeOffset.Now,
+                        prior.Settings ?? state.Settings,
+                        cancellationToken
+                    );
+                    if (entries.Count == 0)
+                        return [];
+
+                    var appendedFile = appendedResult?.Files.LastOrDefault(file =>
+                        file.MessageCount > 0
+                    );
+                    var hasAppendedMessages = appendedResult?.MessageCount > 0;
+
+                    return
+                    [
+                        entries[0] with
+                        {
+                            FirstMessageId = prior.FirstMessageId,
+                            FirstMessageTimestamp = prior.FirstMessageTimestamp,
+                            LastMessageId = hasAppendedMessages
+                                ? appendedFile?.LastMessageId?.ToString()
+                                : prior.LastMessageId,
+                            LastMessageTimestamp = hasAppendedMessages
+                                ? appendedFile?.LastMessageTimestamp
+                                : prior.LastMessageTimestamp,
+                            AssetCount = prior.AssetCount,
+                            Settings = prior.Settings ?? state.Settings,
+                        },
+                    ];
+                },
+                DateTimeOffset.Now,
+                cancellationToken
+            );
+
+            return null;
+        }
+        catch (Exception ex)
+            when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return ex.Message;
+        }
+    }
+
+    private sealed record IncrementalExportState(
+        string ExistingFilePath,
+        ManifestEntry Entry,
+        ManifestExportSettings Settings,
+        ExportFormat Format
+    );
+
+    private sealed record ExportJob(
+        Channel Channel,
+        ExportRequest Request,
+        IncrementalExportState? Incremental = null
+    );
 
     public override async ValueTask ExecuteAsync(IConsole console)
     {
