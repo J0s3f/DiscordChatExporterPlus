@@ -623,7 +623,8 @@ public abstract class ExportCommandBase : DiscordCommandBase
                                             );
 
                                             if (!string.IsNullOrWhiteSpace(manifestWarning))
-                                                manifestWarningsByChannel[channel] = manifestWarning;
+                                                manifestWarningsByChannel[channel] =
+                                                    manifestWarning;
                                         }
                                     }
                                 }
