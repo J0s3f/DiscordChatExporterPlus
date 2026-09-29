@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using DiscordChatExporter.Core.Discord.Data;
 using DiscordChatExporter.Core.Exporting;
 using DiscordChatExporter.Core.Exporting.Continuation;
+using DiscordChatExporter.Core.Exporting.Manifest;
 
 namespace DiscordChatExporter.Gui.ViewModels.Components;
 
@@ -27,5 +28,6 @@ internal sealed record ResolvedContinueTarget(
     string FilePath,
     string Dir,
     ExportFormat Format,
-    ContinuationCutoff Cutoff
+    ContinuationCutoff Cutoff,
+    ManifestExportSettings? Settings = null
 );
