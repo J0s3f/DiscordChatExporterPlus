@@ -1682,8 +1682,7 @@ public partial class DashboardViewModel : ViewModelBase
             ?? throw new InvalidExportException(
                 "The export settings required for continuation are unavailable."
             )
-        )
-        .CreateContinuationRequest(
+        ).CreateContinuationRequest(
             target.Guild,
             target.Channel,
             target.FilePath,
