@@ -86,12 +86,7 @@ public class ManifestBuilderSpecs : IDisposable
             IsUtcNormalizationEnabled: true
         );
 
-        var entries = ManifestBuilder.Build(
-            Info(),
-            result,
-            DateTimeOffset.UnixEpoch,
-            settings
-        );
+        var entries = ManifestBuilder.Build(Info(), result, DateTimeOffset.UnixEpoch, settings);
 
         entries.Should().ContainSingle();
         entries[0].Settings.Should().Be(settings);
