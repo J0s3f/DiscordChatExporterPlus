@@ -5,4 +5,6 @@ namespace DiscordChatExporter.Core.Exporting.Filtering;
 internal class NegatedMessageFilter(MessageFilter filter) : MessageFilter
 {
     public override bool IsMatch(Message message) => !filter.IsMatch(message);
+
+    public override string ToExpression() => $"~({filter.ToExpression()})";
 }
