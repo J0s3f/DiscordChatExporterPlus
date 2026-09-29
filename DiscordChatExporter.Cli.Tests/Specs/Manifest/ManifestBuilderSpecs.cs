@@ -70,11 +70,7 @@ public class ManifestBuilderSpecs : IDisposable
     public void Export_settings_are_attached_to_each_manifest_entry()
     {
         var path = WriteFile("general.json", "hello");
-        var result = new ExportResult(
-            [new ExportedFile(path, 1, null, null, null, null)],
-            1,
-            0
-        );
+        var result = new ExportResult([new ExportedFile(path, 1, null, null, null, null)], 1, 0);
         var settings = new ManifestExportSettings(
             null,
             UsesDefaultAssetsDir: true,
