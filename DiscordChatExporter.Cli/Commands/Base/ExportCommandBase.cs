@@ -875,13 +875,14 @@ public abstract class ExportCommandBase : DiscordCommandBase
                 dir,
                 existing =>
                 {
-                    var prior = existing?.Entries.FirstOrDefault(entry =>
-                        string.Equals(
-                            entry.File,
-                            fileName,
-                            StringComparison.OrdinalIgnoreCase
-                        )
-                    ) ?? state.Entry;
+                    var prior =
+                        existing?.Entries.FirstOrDefault(entry =>
+                            string.Equals(
+                                entry.File,
+                                fileName,
+                                StringComparison.OrdinalIgnoreCase
+                            )
+                        ) ?? state.Entry;
 
                     var info = new ManifestChannelInfo(
                         originalRequest.Guild.Id.ToString(),
