@@ -418,7 +418,11 @@ public abstract class ExportCommandBase : DiscordCommandBase
                 var expectedFileName = Path.GetFileName(job.Request.OutputFilePath);
                 var entry = channelEntries.FirstOrDefault(entry =>
                     entry.Format == job.Request.Format.ToString()
-                    && string.Equals(entry.File, expectedFileName, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(
+                        entry.File,
+                        expectedFileName,
+                        StringComparison.OrdinalIgnoreCase
+                    )
                 );
 
                 if (entry is null && channelEntries.Length == 1)
