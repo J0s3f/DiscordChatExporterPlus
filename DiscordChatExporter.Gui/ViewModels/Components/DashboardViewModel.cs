@@ -1595,7 +1595,9 @@ public partial class DashboardViewModel : ViewModelBase
         );
 
         return targets
-            .Select(target => target.Settings is null ? target with { Settings = settings } : target)
+            .Select(target =>
+                target.Settings is null ? target with { Settings = settings } : target
+            )
             .ToArray();
     }
 
