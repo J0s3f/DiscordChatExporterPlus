@@ -1,10 +1,10 @@
-name: main
+name: release
 
+# Pushing a tag (e.g. 3.0.0) builds self-contained CLI + GUI packages for all
+# supported platforms and publishes them as a GitHub release.
+# The tag name is used as the app version, so don't prefix it with "v".
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - master
     tags:
       - "*"
 
@@ -15,8 +15,6 @@ env:
 
 jobs:
   pack:
-    if: ${{ github.ref_type == 'tag' }}
-
     strategy:
       matrix:
         app:
@@ -40,7 +38,7 @@ jobs:
             asset: DiscordChatExporterPlus
 
     runs-on: ${{ startsWith(matrix.rid, 'win-') && 'windows-latest' || startsWith(matrix.rid, 'osx-') && 'macos-latest' || 'ubuntu-latest' }}
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     permissions:
       actions: write
@@ -59,7 +57,6 @@ jobs:
           -p:Version=${{ github.ref_type == 'tag' && github.ref_name || format('999.9.9-ci-{0}', github.sha) }}
           -p:CSharpier_Bypass=true
           -p:EncryptionSalt=${{ secrets.ENCRYPTION_SALT || 'HimalayanPinkSalt' }}
-          -p:PublishMacOSBundle=${{ startsWith(matrix.rid, 'osx-') }}
           --output ${{ matrix.app }}/bin/publish/
           --configuration Release
           --runtime ${{ matrix.rid }}
