@@ -65,6 +65,7 @@ public partial class DashboardViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(IsProgressIndeterminate))]
     [NotifyCanExecuteChangedFor(nameof(PullGuildsCommand))]
     [NotifyCanExecuteChangedFor(nameof(PullChannelsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(SelectAllChannelsCommand))]
     [NotifyCanExecuteChangedFor(nameof(ExportCommand))]
     public partial bool IsBusy { get; set; }
 
@@ -87,6 +88,7 @@ public partial class DashboardViewModel : ViewModelBase
     public partial Guild? SelectedGuild { get; set; }
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SelectAllChannelsCommand))]
     public partial IReadOnlyList<ChannelConnection>? AvailableChannels { get; set; }
 
     public ObservableCollection<ChannelConnection> SelectedChannels { get; } = [];
@@ -218,6 +220,30 @@ public partial class DashboardViewModel : ViewModelBase
             progress.ReportCompletion();
             IsBusy = false;
         }
+    }
+
+    private bool CanSelectAllChannels() => !IsBusy && AvailableChannels?.Count > 0;
+
+    [RelayCommand(CanExecute = nameof(CanSelectAllChannels))]
+    private void SelectAllChannels()
+    {
+        static IEnumerable<ChannelConnection> Flatten(IEnumerable<ChannelConnection> nodes) =>
+            nodes.SelectMany(n => Flatten(n.Children).Prepend(n));
+
+        // Categories cannot be exported
+        var exportable = Flatten(AvailableChannels ?? [])
+            .Where(c => !c.Channel.IsCategory)
+            .ToArray();
+
+        // Toggle: if everything is already selected, clear the selection instead
+        if (exportable.All(SelectedChannels.Contains))
+        {
+            SelectedChannels.Clear();
+            return;
+        }
+
+        foreach (var channel in exportable.Where(c => !SelectedChannels.Contains(c)))
+            SelectedChannels.Add(channel);
     }
 
     private bool CanExport() =>

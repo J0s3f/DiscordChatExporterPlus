@@ -76,6 +76,7 @@ public partial class LocalizationManager
 
     public string PullGuildsTooltip => Get();
     public string SettingsTooltip => Get();
+    public string SelectAllChannelsTooltip => Get();
     public string LastMessageSentTooltip => Get();
     public string TokenPlaceholderText => Get();
 

@@ -302,6 +302,22 @@
         </ScrollViewer>
       </Panel>
 
+      <!--  Select all channels button  -->
+      <Button
+        Width="40"
+        Height="40"
+        Margin="0,0,100,32"
+        Padding="0"
+        HorizontalAlignment="Right"
+        VerticalAlignment="Bottom"
+        Command="{Binding SelectAllChannelsCommand}"
+        IsVisible="{Binding $self.IsEffectivelyEnabled}"
+        Theme="{DynamicResource MaterialIconButton}"
+        ToolTip.Tip="{Binding LocalizationManager.SelectAllChannelsTooltip}"
+      >
+        <materialIcons:MaterialIcon Width="24" Height="24" Kind="SelectAll" />
+      </Button>
+
       <!--  Export button  -->
       <Button
         Width="56"
