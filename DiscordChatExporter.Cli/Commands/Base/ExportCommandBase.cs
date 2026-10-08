@@ -28,10 +28,33 @@ namespace DiscordChatExporter.Cli.Commands.Base;
 
 public abstract class ExportCommandBase : DiscordCommandBase
 {
-    private sealed class CliExportProgress(IProgress<Percentage> progress)
+    private sealed class CliExportProgress(ProgressTask task, string name)
         : IProgress<ExportProgress>
     {
-        public void Report(ExportProgress value) => progress.Report(value.Fraction);
+        private readonly EtaEstimator _eta = new();
+
+        public void Report(ExportProgress value)
+        {
+            task.Value = value.Fraction.Fraction;
+
+            _eta.Report(value.Fraction.Fraction, DateTimeOffset.UtcNow);
+
+            var details = new List<string>();
+            if (value.MessagesRead > 0)
+                details.Add($"{value.MessagesRead:N0} msgs");
+            if (_eta.Estimate is { } eta && eta > TimeSpan.Zero)
+                details.Add($"ETA {FormatEta(eta)}");
+
+            task.Description =
+                details.Count > 0 ? $"{name} [grey]({string.Join(", ", details)})[/]" : name;
+        }
+
+        private static string FormatEta(TimeSpan eta) =>
+            eta.TotalHours >= 1
+                ? $"{(int)eta.TotalHours}h {eta.Minutes:00}m"
+                : eta.TotalMinutes >= 1
+                    ? $"{eta.Minutes}m {eta.Seconds:00}s"
+                    : $"{eta.Seconds}s";
     }
 
     [CommandOption(
@@ -610,13 +633,16 @@ public abstract class ExportCommandBase : DiscordCommandBase
                                 Markup.Escape(channel.GetHierarchicalName()),
                                 async progress =>
                                 {
-                                    var percentageProgress = progress.ToPercentageBased();
+                                    var exportProgress = new CliExportProgress(
+                                        progress,
+                                        Markup.Escape(channel.GetHierarchicalName())
+                                    );
 
                                     if (job.Incremental is not null)
                                     {
                                         var manifestWarning = await RunIncrementalExportAsync(
                                             job,
-                                            percentageProgress,
+                                            exportProgress,
                                             innerCancellationToken
                                         );
 
@@ -627,7 +653,7 @@ public abstract class ExportCommandBase : DiscordCommandBase
                                     {
                                         var result = await Exporter.ExportChannelAsync(
                                             job.Request,
-                                            new CliExportProgress(percentageProgress),
+                                            exportProgress,
                                             innerCancellationToken
                                         );
 
@@ -790,7 +816,7 @@ public abstract class ExportCommandBase : DiscordCommandBase
 
     private async ValueTask<string?> RunIncrementalExportAsync(
         ExportJob job,
-        IProgress<Percentage> progress,
+        IProgress<ExportProgress> progress,
         CancellationToken cancellationToken
     )
     {
@@ -833,7 +859,7 @@ public abstract class ExportCommandBase : DiscordCommandBase
             {
                 appendedResult = await Exporter.ExportChannelAsync(
                     request,
-                    new CliExportProgress(progress),
+                    progress,
                     cancellationToken
                 );
             }

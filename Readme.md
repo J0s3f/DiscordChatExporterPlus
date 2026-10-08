@@ -14,6 +14,25 @@ It works with direct messages, group messages, and server channels, and supports
 This application comes in two flavors: graphical user interface (**GUI**) and command-line interface (**CLI**).
 Supported operating systems are Windows 7 or higher, macOS 10.13 (High Sierra) or higher, and Linux.
 
+## Additional features (merged from wefalltomorrow/DiscordChatExporter)
+
+- **Resume / incremental export** (`--resume`, `--incremental`, `manifest.json`) in the CLI, and *Continue export* in the GUI.
+- **SQLite (`.db`) export** with full-text search.
+- **Library** (GUI view, CLI `library` and `search` commands) to browse and search previous exports.
+- **Conversion** (GUI view, CLI `convert` command) from JSON exports to HTML, TXT, CSV or SQLite, offline.
+- **Progress with message counts and ETA** in both the GUI and the CLI.
+- Conservative, rate-limit-aware Discord API behaviour for user tokens.
+- **Select all** channels of a server in the GUI.
+
+CLI examples:
+
+```
+DiscordChatExporterPlus.Cli exportguild -g <guild> -f Db -o "C:\Exports\" --resume
+DiscordChatExporterPlus.Cli convert -i chat.json -f HtmlDark -f Csv
+DiscordChatExporterPlus.Cli library -d "C:\Exports"
+DiscordChatExporterPlus.Cli search "hello world" -d "C:\Exports"
+```
+
 ## Installation
 
 To install this fork, download the [latest release](https://github.com/nulldg/DiscordChatExporterPlus/releases/latest) and extract the zip into an empty directory.

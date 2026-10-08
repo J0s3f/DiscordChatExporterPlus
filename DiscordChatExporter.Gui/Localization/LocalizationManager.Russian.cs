@@ -42,7 +42,7 @@ public partial class LocalizationManager
                 * У вашего бота должен быть включен **Message Content Intent** для чтения сообщений
                 """,
             [nameof(TokenHelpText)] =
-                "Если у вас есть вопросы или проблемы, обратитесь к [документации](https://github.com/nulldg/DiscordChatExporterPlus/tree/master/.docs)",
+                "Если у вас есть вопросы или проблемы, обратитесь к [документации](https://github.com/wefalltomorrow/DiscordChatExporter/tree/prime/.docs)",
             // Settings
             [nameof(SettingsTitle)] = "Настройки",
             [nameof(ThemeLabel)] = "Тема",
@@ -97,9 +97,11 @@ public partial class LocalizationManager
             [nameof(BeforeDateLabel)] = "До (дата)",
             [nameof(BeforeDateTooltip)] = "Включать только сообщения, отправленные до этой даты",
             [nameof(AfterTimeLabel)] = "После (время)",
-            [nameof(AfterTimeTooltip)] = "Включать только сообщения, отправленные после этого времени",
+            [nameof(AfterTimeTooltip)] =
+                "Включать только сообщения, отправленные после этого времени",
             [nameof(BeforeTimeLabel)] = "До (время)",
-            [nameof(BeforeTimeTooltip)] = "Включать только сообщения, отправленные до этого времени",
+            [nameof(BeforeTimeTooltip)] =
+                "Включать только сообщения, отправленные до этого времени",
             [nameof(PartitionLimitLabel)] = "Разделять экспорт",
             [nameof(PartitionLimitTooltip)] =
                 "Разделить вывод на части, каждая ограничена указанным количеством сообщений (напр. '100') или размером файла (напр. '10mb')",
