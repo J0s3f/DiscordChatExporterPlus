@@ -44,6 +44,18 @@ Type the following command in your terminal of choice, then press ENTER to run i
 
 To use the commands, you'll need a token. For the instructions on how to get a token, please refer to [this page](Token-and-IDs.md), or run `./DiscordChatExporterPlus.Cli guide`.
 
+The CLI accepts the token through `-t|--token` or the `DISCORD_TOKEN` environment variable. For local
+scripts, the environment variable keeps the token out of the process command line:
+
+```powershell
+$env:DISCORD_TOKEN = "your-token"
+.\DiscordChatExporter.Cli.exe exportguild -g 21814 --resume
+```
+
+User-token requests always respect Discord's advisory rate-limit headers. The
+`--respect-rate-limits false` compatibility option only disables advisory handling for bot-token
+requests; HTTP 429 responses are always respected.
+
 To get help with a specific command, run:
 
 ```console
@@ -66,8 +78,8 @@ You can quickly export with DCE's default settings by using just `-t token` and 
 
 #### Changing the format
 
-You can change the export format to `HtmlDark`, `HtmlLight`, `PlainText` `Json` or `Csv` with `-f format`. The default
-format is `HtmlDark`.
+You can change the export format to `HtmlDark`, `HtmlLight`, `PlainText`, `Json`, `Csv`, or `Db` with `-f format`.
+The `Db` format writes a SQLite `.db` file. The default format is `HtmlDark`.
 
 ```console
 ./DiscordChatExporterPlus.Cli export -t "mfa.Ifrn" -c 53555 -f Json
@@ -75,7 +87,7 @@ format is `HtmlDark`.
 
 #### Changing the output filename
 
-You can change the filename by using `-o name.ext`. e.g., for the `HTML` format:
+You can change the filename by using `-o name.ext`. e.g. for the `HTML` format:
 
 ```console
 ./DiscordChatExporterPlus.Cli export -t "mfa.Ifrn" -c 53555 -o myserver.html
@@ -184,21 +196,21 @@ locales. The default locale is `en-US`.
 #### Date ranges
 
 **Messages sent before a date**
-Use `--before` to export messages sent before the provided date. e.g., messages sent before September 18th, 2019:
+Use `--before` to export messages sent before the provided date. E.g. messages sent before September 18th, 2019:
 
 ```console
 ./DiscordChatExporterPlus.Cli export -t "mfa.Ifrn" -c 53555 --before 2019-09-18
 ```
 
 **Messages sent after a date**
-Use `--after` to export messages sent after the provided date. e.g., messages sent after September 17th, 2019 11:34 PM:
+Use `--after` to export messages sent after the provided date. E.g. messages sent after September 17th, 2019 11:34 PM:
 
 ```console
 ./DiscordChatExporterPlus.Cli export -t "mfa.Ifrn" -c 53555 --after "2019-09-17 23:34"
 ```
 
 **Messages sent in a date range**
-Use `--before` and `--after` to export messages sent during the provided date range. e.g., messages sent between
+Use `--before` and `--after` to export messages sent during the provided date range. E.g. messages sent between
 September 17th, 2019 11:34 PM and September 18th:
 
 ```console
@@ -228,6 +240,80 @@ To export all channels in a specific server, use the `exportguild` command and p
 ```console
 ./DiscordChatExporterPlus.Cli exportguild -t "mfa.Ifrn" -g 21814
 ```
+
+For long archival exports, prefer `DISCORD_TOKEN` plus `--resume` so the token is not present in the
+command line and completed channels are checkpointed:
+
+```powershell
+$env:DISCORD_TOKEN = "your-token"
+.\DiscordChatExporter.Cli.exe exportguild -g 21814 --resume -f Json -o "C:\Discord Exports"
+```
+
+This fork serializes user-token Discord API traffic internally and spaces request starts conservatively.
+Channel-level parallelism can still overlap local export work, but it does not create simultaneous
+user-token Discord API requests.
+
+#### Resuming interrupted multi-channel exports
+
+For long whole-server or multi-channel exports, use `--resume` to enable per-channel checkpointing.
+Each completed channel is recorded in `manifest.json` together with its file size, SHA-256 hash, format,
+and continuation-sensitive export settings.
+
+```console
+./DiscordChatExporter.Cli exportguild -t "mfa.Ifrn" -g 21814 --resume
+```
+
+With manifest schema v2, resume treats the recorded settings as the source of truth for an existing
+archive. If the current CLI options differ, DiscordChatExporter warns and restores the original format,
+media download/reuse and media directory, date range, partitioning, filter, reverse-order, markdown,
+locale, and UTC settings before deciding whether that archive is complete. If a recorded output is
+missing or fails integrity verification, it is rebuilt with those restored settings instead of the
+current defaults.
+
+Channels that have no manifest entry yet use the options supplied on the current command because there
+are no recorded settings to restore. Older v1 manifests also lack stored settings, so they retain the
+legacy behavior until a successful checkpoint upgrades their entries.
+
+The manifest is updated as each channel finishes, so progress survives a crash or terminal closure.
+Partitioned exports are considered complete only when every recorded partition exists and passes
+integrity verification.
+
+If you want to create checkpoints without skipping any existing exports on the current run, use
+`--checkpoint` instead. A later run can then use `--resume`.
+
+```console
+./DiscordChatExporter.Cli exportguild -t "mfa.Ifrn" -g 21814 --checkpoint
+```
+
+A manifest/catalog write failure is reported as a warning and does not invalidate an otherwise
+successful channel export.
+
+#### Updating an existing export with new messages
+
+Use `--incremental` to update an existing completed export with messages posted after the last
+message already stored in that export.
+
+```console
+./DiscordChatExporter.Cli exportguild -t "mfa.Ifrn" -g 21814 -f Json -o "C:\Discord Exports" --incremental
+```
+
+Incremental mode is different from `--resume`:
+
+- `--resume` finishes an interrupted multi-channel run and skips channels already recorded as complete.
+- `--incremental` opens an existing completed export, fetches messages after its last exported message,
+  merges the new messages into the existing file, and refreshes `manifest.json`.
+- Channels that do not have a previous export in the manifest are exported normally.
+
+Manifest schema v2 stores the original export settings required for continuation, including media
+download/reuse, media directory, message filter, markdown handling, locale, UTC normalization, date
+range, reverse-order state, and partition settings. Incremental runs restore those settings from the
+manifest instead of silently using current defaults.
+
+If an older v1 manifest is encountered, the CLI uses the options supplied for that run and stores them
+in the upgraded manifest after a successful incremental update.
+
+`--incremental` cannot be combined with `--resume` or `--checkpoint`. Partitioned and
+reverse-chronological exports are not currently supported for incremental continuation.
 
 #### Including threads
 

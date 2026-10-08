@@ -7,6 +7,8 @@ namespace DiscordChatExporter.Core.Exporting.Partitioning;
 public abstract partial class PartitionLimit
 {
     public abstract bool IsReached(long messagesWritten, long bytesWritten);
+
+    public abstract string? ToExpression();
 }
 
 public partial class PartitionLimit

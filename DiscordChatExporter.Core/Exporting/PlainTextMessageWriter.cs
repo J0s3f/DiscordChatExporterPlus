@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -12,13 +13,6 @@ internal class PlainTextMessageWriter(Stream stream, ExportContext context)
     : MessageWriter(stream, context)
 {
     private readonly TextWriter _writer = new StreamWriter(stream);
-
-    private async ValueTask<string> FormatMarkdownAsync(
-        string markdown,
-        CancellationToken cancellationToken = default) =>
-        Context.Request.ShouldFormatMarkdown
-            ? await PlainTextMarkdownVisitor.FormatAsync(Context, markdown, cancellationToken)
-            : markdown;
 
     private async ValueTask WriteMessageHeaderAsync(Message message)
     {
@@ -35,7 +29,8 @@ internal class PlainTextMessageWriter(Stream stream, ExportContext context)
 
     private async ValueTask WriteAttachmentsAsync(
         IReadOnlyList<Attachment> attachments,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         if (!attachments.Any())
             return;
@@ -56,7 +51,8 @@ internal class PlainTextMessageWriter(Stream stream, ExportContext context)
 
     private async ValueTask WriteEmbedsAsync(
         IReadOnlyList<Embed> embeds,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         foreach (var embed in embeds)
         {
@@ -139,7 +135,8 @@ internal class PlainTextMessageWriter(Stream stream, ExportContext context)
 
     private async ValueTask WriteStickersAsync(
         IReadOnlyList<Sticker> stickers,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         if (!stickers.Any())
             return;
@@ -160,7 +157,8 @@ internal class PlainTextMessageWriter(Stream stream, ExportContext context)
 
     private async ValueTask WriteReactionsAsync(
         IReadOnlyList<Reaction> reactions,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         if (!reactions.Any())
             return;
@@ -180,14 +178,18 @@ internal class PlainTextMessageWriter(Stream stream, ExportContext context)
 
             if (reaction.Count > 1)
             {
-                await _writer.WriteAsync($" ({reaction.Count})");
+                await _writer.WriteAsync(
+                    $" ({reaction.Count.ToString("N0", Context.Request.CultureInfo ?? CultureInfo.InvariantCulture)})"
+                );
             }
         }
 
         await _writer.WriteLineAsync();
     }
 
-    public override async ValueTask WritePreambleAsync(CancellationToken cancellationToken = default)
+    public override async ValueTask WritePreambleAsync(
+        CancellationToken cancellationToken = default
+    )
     {
         await _writer.WriteLineAsync(new string('=', 62));
         await _writer.WriteLineAsync($"Guild: {Context.Request.Guild.Name}");
@@ -200,12 +202,16 @@ internal class PlainTextMessageWriter(Stream stream, ExportContext context)
 
         if (Context.Request.After is not null)
         {
-            await _writer.WriteLineAsync($"After: {Context.FormatDate(Context.Request.After.Value.ToDate())}");
+            await _writer.WriteLineAsync(
+                $"After: {Context.FormatDate(Context.Request.After.Value.ToDate())}"
+            );
         }
 
         if (Context.Request.Before is not null)
         {
-            await _writer.WriteLineAsync($"Before: {Context.FormatDate(Context.Request.Before.Value.ToDate())}");
+            await _writer.WriteLineAsync(
+                $"Before: {Context.FormatDate(Context.Request.Before.Value.ToDate())}"
+            );
         }
 
         await _writer.WriteLineAsync(new string('=', 62));
@@ -239,7 +245,8 @@ internal class PlainTextMessageWriter(Stream stream, ExportContext context)
 
     public override async ValueTask WriteMessageAsync(
         Message message,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         await base.WriteMessageAsync(message, cancellationToken);
 
@@ -275,10 +282,14 @@ internal class PlainTextMessageWriter(Stream stream, ExportContext context)
         await _writer.WriteLineAsync();
     }
 
-    public override async ValueTask WritePostambleAsync(CancellationToken cancellationToken = default)
+    public override async ValueTask WritePostambleAsync(
+        CancellationToken cancellationToken = default
+    )
     {
         await _writer.WriteLineAsync(new string('=', 62));
-        await _writer.WriteLineAsync($"Exported {MessagesWritten:N0} message(s)");
+        await _writer.WriteLineAsync(
+            $"Exported {MessagesWritten.ToString("N0", Context.Request.CultureInfo ?? CultureInfo.InvariantCulture)} message(s)"
+        );
         await _writer.WriteLineAsync(new string('=', 62));
     }
 

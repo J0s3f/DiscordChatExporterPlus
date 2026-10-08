@@ -1,9 +1,12 @@
 using System;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Security.Authentication;
+using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using HttpCloak;
 using Polly;
@@ -15,6 +18,13 @@ namespace DiscordChatExporter.Core.Utils;
 public static class Http
 {
     public static HttpClient Client { get; } = new();
+
+    internal static ResiliencePropertyKey<
+        Func<TimeSpan, CancellationToken, ValueTask>
+    > RateLimitDelayHandlerKey { get; } = new("DiscordRateLimitDelayHandler");
+
+    private static ResiliencePropertyKey<TimeSpan> RateLimitDelayKey { get; } =
+        new("DiscordRateLimitDelay");
 
     private static bool IsRetryableStatusCode(HttpStatusCode statusCode) =>
         statusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.RequestTimeout
@@ -36,6 +46,100 @@ public static class Http
                     && IsRetryableStatusCode(hrex.StatusCode ?? HttpStatusCode.OK)
             );
 
+    private static bool IsRateLimitResponse(HttpResponseMessage? response) =>
+        response?.StatusCode == HttpStatusCode.TooManyRequests;
+
+    private static async ValueTask<TimeSpan?> TryGetDiscordRetryAfterAsync(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!IsRateLimitResponse(response))
+            return null;
+
+        try
+        {
+            var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (string.IsNullOrWhiteSpace(payload))
+                return null;
+
+            using var json = JsonDocument.Parse(payload);
+            if (!json.RootElement.TryGetProperty("retry_after", out var retryAfterElement))
+                return null;
+
+            double retryAfterSeconds;
+            if (
+                retryAfterElement.ValueKind == JsonValueKind.Number
+                && retryAfterElement.TryGetDouble(out retryAfterSeconds)
+            )
+            {
+                // Parsed below.
+            }
+            else if (
+                retryAfterElement.ValueKind == JsonValueKind.String
+                && double.TryParse(
+                    retryAfterElement.GetString(),
+                    NumberStyles.Float,
+                    CultureInfo.InvariantCulture,
+                    out retryAfterSeconds
+                )
+            )
+            {
+                // Parsed below.
+            }
+            else
+            {
+                return null;
+            }
+
+            return retryAfterSeconds >= 0 && double.IsFinite(retryAfterSeconds)
+                ? TimeSpan.FromSeconds(retryAfterSeconds)
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+        catch (OverflowException)
+        {
+            return null;
+        }
+    }
+
+    private static async ValueTask<TimeSpan> GetResponseRetryDelayAsync(
+        RetryDelayGeneratorArguments<HttpResponseMessage> args
+    )
+    {
+        // Discord's 429 body is the most direct source of retry timing. Prefer it, then
+        // standard/advisory headers, and only then fall back to exponential retry.
+        if (args.Outcome.Result is { } response && IsRateLimitResponse(response))
+        {
+            if (
+                await TryGetDiscordRetryAfterAsync(response, args.Context.CancellationToken) is
+                { } bodyRetryAfter
+            )
+            {
+                return bodyRetryAfter + TimeSpan.FromSeconds(1);
+            }
+
+            if (response.Headers.RetryAfter?.Delta is { } headerRetryAfter)
+                return headerRetryAfter + TimeSpan.FromSeconds(1);
+
+            var resetAfterSeconds = response
+                .Headers.TryGetValue("X-RateLimit-Reset-After")
+                ?.Pipe(v => double.ParseOrNull(v, CultureInfo.InvariantCulture));
+
+            if (resetAfterSeconds is >= 0)
+                return TimeSpan.FromSeconds(resetAfterSeconds.Value) + TimeSpan.FromSeconds(1);
+        }
+
+        return TimeSpan.FromSeconds(Math.Pow(2, args.AttemptNumber) + 1);
+    }
+
     public static ResiliencePipeline ResiliencePipeline { get; } =
         new ResiliencePipelineBuilder()
             .AddRetry(
@@ -45,6 +149,7 @@ public static class Http
                     MaxRetryAttempts = 4,
                     BackoffType = DelayBackoffType.Exponential,
                     Delay = TimeSpan.FromSeconds(1),
+                    UseJitter = true,
                 }
             )
             .Build();
@@ -58,21 +163,51 @@ public static class Http
                         .Handle<Exception>(IsRetryableException)
                         .HandleResult(m => IsRetryableStatusCode(m.StatusCode)),
                     MaxRetryAttempts = 8,
-                    DelayGenerator = args =>
+                    DelayGenerator = async args =>
                     {
-                        // If rate-limited, use retry-after header as the guide.
-                        // The response can be null here if an exception was thrown.
-                        if (args.Outcome.Result?.Headers.RetryAfter?.Delta is { } retryAfter)
+                        var delay = await GetResponseRetryDelayAsync(args);
+
+                        if (
+                            IsRateLimitResponse(args.Outcome.Result)
+                            && args.Context.Properties.TryGetValue(RateLimitDelayHandlerKey, out _)
+                        )
                         {
-                            // Add some buffer just in case
-                            return ValueTask.FromResult<TimeSpan?>(
-                                retryAfter + TimeSpan.FromSeconds(1)
-                            );
+                            args.Context.Properties.Set(RateLimitDelayKey, delay);
+                            return TimeSpan.Zero;
                         }
 
-                        return ValueTask.FromResult<TimeSpan?>(
-                            TimeSpan.FromSeconds(Math.Pow(2, args.AttemptNumber) + 1)
-                        );
+                        return delay;
+                    },
+                    OnRetry = async args =>
+                    {
+                        var response = args.Outcome.Result;
+                        try
+                        {
+                            if (!IsRateLimitResponse(response))
+                                return;
+
+                            if (
+                                !args.Context.Properties.TryGetValue(
+                                    RateLimitDelayHandlerKey,
+                                    out var delayHandler
+                                )
+                            )
+                            {
+                                return;
+                            }
+
+                            var delay = args.Context.Properties.GetValue(
+                                RateLimitDelayKey,
+                                args.RetryDelay
+                            );
+
+                            response?.Dispose();
+                            await delayHandler(delay, args.Context.CancellationToken);
+                        }
+                        finally
+                        {
+                            response?.Dispose();
+                        }
                     },
                 }
             )

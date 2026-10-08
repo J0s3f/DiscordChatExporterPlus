@@ -23,6 +23,12 @@ namespace DiscordChatExporter.Gui.ViewModels.Components;
 
 public partial class DashboardViewModel : ViewModelBase
 {
+    // Synchronous adapter (unlike Progress<T>, never posts reports after completion)
+    private sealed class FractionProgress(IProgress<Percentage> inner) : IProgress<ExportProgress>
+    {
+        public void Report(ExportProgress value) => inner.Report(value.Fraction);
+    }
+
     private readonly ViewModelManager _viewModelManager;
     private readonly SnackbarManager _snackbarManager;
     private readonly DialogManager _dialogManager;
@@ -306,7 +312,11 @@ public partial class DashboardViewModel : ViewModelBase
                             _settingsService.IsUtcNormalizationEnabled
                         );
 
-                        await exporter.ExportChannelAsync(request, progress, cancellationToken);
+                        await exporter.ExportChannelAsync(
+                            request,
+                            new FractionProgress(progress),
+                            cancellationToken
+                        );
 
                         Interlocked.Increment(ref successfulExportCount);
                     }

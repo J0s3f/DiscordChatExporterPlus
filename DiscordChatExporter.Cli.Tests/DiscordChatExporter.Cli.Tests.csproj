@@ -11,9 +11,12 @@
 
   <ItemGroup>
     <PackageReference Include="AngleSharp" />
+    <PackageReference Include="WebMarkupMin.Core" />
+    <PackageReference Include="coverlet.collector" PrivateAssets="all" />
     <PackageReference Include="FluentAssertions" />
     <PackageReference Include="GitHubActionsTestLogger" />
     <PackageReference Include="JsonExtensions" />
+    <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="Microsoft.Extensions.Configuration" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" />
     <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" />

@@ -13,4 +13,6 @@ internal class MentionsMessageFilter(string value) : MessageFilter
             || string.Equals(value, user.FullName, StringComparison.OrdinalIgnoreCase)
             || string.Equals(value, user.Id.ToString(), StringComparison.OrdinalIgnoreCase)
         );
+
+    public override string ToExpression() => $"mentions:{QuoteExpressionValue(value)}";
 }

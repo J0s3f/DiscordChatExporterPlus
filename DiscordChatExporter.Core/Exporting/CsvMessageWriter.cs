@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Threading;
@@ -14,19 +15,17 @@ internal partial class CsvMessageWriter(Stream stream, ExportContext context)
 {
     private readonly TextWriter _writer = new StreamWriter(stream);
 
-    private async ValueTask<string> FormatMarkdownAsync(
-        string markdown,
-        CancellationToken cancellationToken = default) =>
-        Context.Request.ShouldFormatMarkdown
-            ? await PlainTextMarkdownVisitor.FormatAsync(Context, markdown, cancellationToken)
-            : markdown;
-
-    public override async ValueTask WritePreambleAsync(CancellationToken cancellationToken = default) =>
-        await _writer.WriteLineAsync("AuthorID,Author,Date,Content,Attachments,Reactions");
+    public override async ValueTask WritePreambleAsync(
+        CancellationToken cancellationToken = default
+    ) =>
+        await _writer.WriteLineAsync(
+            "MessageID,AuthorID,Author,Date,Content,Attachments,Reactions"
+        );
 
     private async ValueTask WriteAttachmentsAsync(
         IReadOnlyList<Attachment> attachments,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var buffer = new StringBuilder();
 
@@ -44,7 +43,8 @@ internal partial class CsvMessageWriter(Stream stream, ExportContext context)
 
     private async ValueTask WriteReactionsAsync(
         IReadOnlyList<Reaction> reactions,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var buffer = new StringBuilder();
 
@@ -57,7 +57,12 @@ internal partial class CsvMessageWriter(Stream stream, ExportContext context)
                 .Append(reaction.Emoji.Name)
                 .Append(' ')
                 .Append('(')
-                .Append(reaction.Count)
+                .Append(
+                    reaction.Count.ToString(
+                        "N0",
+                        Context.Request.CultureInfo ?? CultureInfo.InvariantCulture
+                    )
+                )
                 .Append(')');
         }
 
@@ -66,9 +71,14 @@ internal partial class CsvMessageWriter(Stream stream, ExportContext context)
 
     public override async ValueTask WriteMessageAsync(
         Message message,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         await base.WriteMessageAsync(message, cancellationToken);
+
+        // Message ID
+        await _writer.WriteAsync(CsvEncode(message.Id.ToString()));
+        await _writer.WriteAsync(',');
 
         // Author ID
         await _writer.WriteAsync(CsvEncode(message.Author.Id.ToString()));
@@ -85,15 +95,13 @@ internal partial class CsvMessageWriter(Stream stream, ExportContext context)
         // Message content
         if (message.IsSystemNotification)
         {
-            await _writer.WriteAsync(CsvEncode(
-                message.GetFallbackContent()
-            ));
+            await _writer.WriteAsync(CsvEncode(message.GetFallbackContent()));
         }
         else
         {
-            await _writer.WriteAsync(CsvEncode(
-                await FormatMarkdownAsync(message.Content, cancellationToken)
-            ));
+            await _writer.WriteAsync(
+                CsvEncode(await FormatMarkdownAsync(message.Content, cancellationToken))
+            );
         }
 
         await _writer.WriteAsync(',');
@@ -120,6 +128,11 @@ internal partial class CsvMessageWriter
 {
     private static string CsvEncode(string value)
     {
+        if (value.Length > 0 && value[0] is '=' or '+' or '-' or '@' or '\t' or '\r')
+        {
+            value = '\'' + value;
+        }
+
         value = value.Replace("\"", "\"\"", StringComparison.Ordinal);
         return $"\"{value}\"";
     }

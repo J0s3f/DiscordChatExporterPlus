@@ -23,6 +23,8 @@ public partial class ExportRequest
 
     public string AssetsDirPath { get; }
 
+    public bool HasExplicitAssetsDirPath { get; }
+
     public ExportFormat Format { get; }
 
     public Snowflake? After { get; }
@@ -83,8 +85,9 @@ public partial class ExportRequest
 
         OutputDirPath = Path.GetDirectoryName(OutputFilePath)!;
 
-        AssetsDirPath = !string.IsNullOrWhiteSpace(assetsDirPath)
-            ? FormatPath(assetsDirPath, Guild, Channel, After, Before)
+        HasExplicitAssetsDirPath = !string.IsNullOrWhiteSpace(assetsDirPath);
+        AssetsDirPath = HasExplicitAssetsDirPath
+            ? FormatPath(assetsDirPath!, Guild, Channel, After, Before)
             : $"{OutputFilePath}_Files{Path.DirectorySeparatorChar}";
 
         CultureInfo = Locale?.Pipe(CultureInfo.GetCultureInfo);
